@@ -87,13 +87,15 @@ Mentra Live supports photo capture and video recording from the glasses camera.
 
 ### Gallery-mode behavior
 
-The phone controls whether a physical button press should capture locally through `save_in_gallery_mode`:
+The phone controls whether a physical button press should capture locally through `save_in_gallery_mode`. The "phone connected" input to that decision is the **BES-reported phone BLE presence** (BES firmware >= 17.26.7.23 reports `sr_phble` connect/disconnect edges and syncs `phone_ble` in every `sr_syvr` reply), which is a tri-state: `PRESENT`, `ABSENT`, or `UNKNOWN` when no signal has arrived — old BES firmware never reports presence, so on the deployed fleet the value stays `UNKNOWN`.
 
-| Gallery mode | Phone connected | Local capture behavior |
+| Gallery mode | Phone presence | Local capture behavior |
 | --- | --- | --- |
-| Enabled | Either | Capture locally. |
-| Disabled | Connected | Do not capture locally; forward the press and let the phone/app flow handle it. |
-| Disabled | Disconnected | Capture locally as a fallback so the user action is not lost. |
+| Enabled | Any | Capture locally. |
+| Disabled | `PRESENT` | Do not capture locally; forward the press and let the phone/app flow handle it. |
+| Disabled | `ABSENT` or `UNKNOWN` | Capture locally so the user action is not lost. |
+
+`UNKNOWN` is deliberately treated as "no phone": the accepted trade-off is a possible duplicate capture (glasses and phone app both capture) rather than a lost photo. In particular, on BES firmware without presence reporting, disabling gallery mode does **not** suppress local capture even while a phone is connected.
 
 Every camera-button press should still be forwarded to the phone as a `button_press` event regardless of the local-capture decision.
 
@@ -145,6 +147,13 @@ The MTK↔BES UART always starts at 460800 baud. Firmware that supports the nego
 
 ### Diagnostics and reporting
 
+The BES `hs_syvr` system-version response includes the provisioned
+manufacturing serial as `serial_number`. `asg_client` caches a valid value and
+forwards it to the phone in `version_info_3`; the all-zero factory default is
+treated as unprovisioned and omitted. This is the canonical inventory identity
+for Mentra Live. Android's `ro.serialno` and Bluetooth MAC addresses are not
+substitutes for it.
+
 `asg_client` includes logging, crash/error reporting, incident log buffering, and debug receivers for development and OTA testing. Production behavior should prioritize device stability and useful logs for support while avoiding secrets in logs.
 
 ## How Mentra Live works at runtime
@@ -163,6 +172,18 @@ The MTK↔BES UART always starts at 460800 baud. Firmware that supports the nego
 2. `asg_client` responds with device status and applies persisted or received settings.
 3. For Mentra Live, MTK claims RGB status LED authority as soon as the BES UART transport is ready, then reasserts it after phone readiness.
 4. Ongoing commands are dispatched through command handlers and responses are sent back over BLE.
+
+### Process session identity
+
+Each `asg_client` process generates a session id (`sid`, 8 hex chars) at startup and
+carries it in `glasses_ready` and `version_info_1`. The BES keeps the phone's BLE link
+alive across `asg_client` restarts (APK OTA, crash recovery), so the phone cannot detect
+a restart from transport state; a changed — or newly appearing — `sid` is the explicit
+restart signal. On observing it, the phone re-runs its readiness flow (`phone_ready` →
+`glasses_ready`, wire re-negotiation) and treats it as the OTA reconnect edge. Builds
+without the field get the phone's legacy behavior; the field first appearing right after
+an update from such a build is itself treated as a restart (that transition is the
+upgrade OTA completing).
 
 ### Camera button photo flow
 

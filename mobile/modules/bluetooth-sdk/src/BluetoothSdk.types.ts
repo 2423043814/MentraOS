@@ -801,6 +801,17 @@ export type MtkUpdateCompleteEvent = {
   timestamp: number
 }
 
+/**
+ * The glasses process restarted while the BES kept the BLE link alive (its `sid`
+ * changed, or first appeared after an update from a pre-sid build). There is no
+ * physical disconnect for this — treat it as the logical reconnect edge.
+ */
+export type GlassesSessionChangedEvent = {
+  type: "glasses_session_changed"
+  previous_sid: string
+  sid: string
+}
+
 /** @deprecated Glasses no longer emit ota_progress; use {@link OtaStatusEvent} and status-store mapping. */
 export type OtaProgressEvent = {
   type: "ota_progress"
@@ -817,16 +828,6 @@ export type OtaStartAckEvent = {
   type: "ota_start_ack"
   timestamp: number
 }
-
-export type OtaUpdateAvailableEvent = {
-  type: "ota_update_available"
-  version_code?: number
-  version_name?: string
-  updates?: string[]
-  total_size?: number
-  cache_ready?: boolean
-}
-
 export type OtaStatusEvent = {
   type: "ota_status"
   session_id: string
@@ -905,7 +906,7 @@ export type BluetoothSdkModuleEvents = {
   stream_status: (event: StreamStatusEvent) => void
   keep_alive_ack: (event: KeepAliveAckEvent) => void
   mtk_update_complete: (event: MtkUpdateCompleteEvent) => void
-  ota_update_available: (event: OtaUpdateAvailableEvent) => void
+  glasses_session_changed: (event: GlassesSessionChangedEvent) => void
   ota_start_ack: (event: OtaStartAckEvent) => void
   ota_status: (event: OtaStatusEvent) => void
   ar99_ota_status: (event: Ar99OtaStatusEvent) => void
@@ -1004,7 +1005,6 @@ export type BluetoothSdkEventMap = {
   mic_pcm: MicPcmEvent
   mic_lc3: MicLc3Event
   stream_status: StreamStatusEvent
-  ota_update_available: OtaUpdateAvailableEvent
   ota_start_ack: OtaStartAckEvent
   ota_status: OtaStatusEvent
   ar99_ota_status: Ar99OtaStatusEvent
@@ -1200,6 +1200,8 @@ export interface OtaUpdateInfo {
   updates: string[] // ["apk", "mtk", "bes"]
   totalSize: number
   cacheReady?: boolean
+  /** True when the APK step installs an older build than the glasses currently run (exact-pin manifests only). */
+  isDowngrade?: boolean
 }
 
 export interface OtaProgress {

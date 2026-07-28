@@ -24,7 +24,7 @@ export interface Setting {
   // Pairing-identity keys are NATIVE-authoritative: the native layer writes
   // them on pairing success (handleDeviceReady) / forget and echoes them down
   // via save_setting; JS鈫抧ative they travel only in the explicit SEEDS
-  // (hydration, pre-connect, post-demotion, abandon re-seed) 鈥?never the
+  // (hydration, pre-connect, post-demotion, abandon re-seed) - never the
   // change-push and never the on-connect replay, whose mid-relay snapshot can
   // overwrite a just-promoted identity. PAIRING_IDENTITY_KEYS is derived from
   // this flag so the sync exclusions can't drift from the descriptors.
@@ -186,7 +186,7 @@ export const SETTINGS: Record<string, Setting> = {
   },
   // Developer override for the ASG OTA manifest URL. null/empty = no override;
   // the normal selection applies (legacy-glasses gate, EXPO_PUBLIC_ASG_OTA_VERSION_URL,
-  // glasses-reported URL, then production). See getAsgOtaVersionUrl.
+  // glasses-reported URL, then production). See resolveOtaManifestUrl.
   ota_version_url: {
     key: "ota_version_url",
     defaultValue: () => null,
@@ -780,6 +780,10 @@ const getDefaultSettings = () =>
 // flight. Cleared on failure so a later call can retry.
 let loadAllSettingsInFlight: AsyncResult<void, Error> | null = null
 
+function printableSettingValue(key: string, value: unknown): string {
+  return key.includes("token") || key.includes("email") ? "<redacted>" : JSON.stringify(value)
+}
+
 export const useSettingsStore = create<SettingsState>()(
   subscribeWithSelector((set, get) => ({
     settings: getDefaultSettings(),
@@ -803,7 +807,7 @@ export const useSettingsStore = create<SettingsState>()(
         }
 
         // Update store immediately for optimistic UI
-        console.log(`SETTINGS: SET: ${key} = ${value}`)
+        console.log(`SETTINGS: SET: ${key} = ${printableSettingValue(key, value)}`)
         set((state) => ({
           settings: {...state.settings, [key]: value},
         }))
@@ -928,9 +932,7 @@ export const useSettingsStore = create<SettingsState>()(
           // logs are uploaded in bug-report artifacts (same keys
           // diagnosticContext's SENSITIVE_SETTINGS_KEYS strips, minus an
           // import that would cycle stores <-> utils).
-          const printable =
-            setting.key.includes("token") || setting.key.includes("email") ? "<redacted>" : JSON.stringify(value)
-          console.log(`SETTINGS: LOAD: ${setting.key} = ${printable}`)
+          console.log(`SETTINGS: LOAD: ${setting.key} = ${printableSettingValue(setting.key, value)}`)
           loadedSettings[setting.key] = value
         }
 

@@ -23,6 +23,9 @@ public final class OtaProtocol {
   }
 
   public static byte[] buildRequestUpgrade(int packageSize, int blockSize, long crc32) {
+    // Wire layout matches the vendor bring-up frame: type marker, then TLV
+    // 0x0A/len4 = package size (LE). CRC is validated per-block in SEND_IMAGE_DATA;
+    // blockSize is negotiated separately in CONNECT_NEGOTIATION.
     ByteArrayOutputStream payload = new ByteArrayOutputStream();
     payload.write(0x09);
     payload.write(0x01);
@@ -30,10 +33,10 @@ public final class OtaProtocol {
     payload.write(0x01);
     payload.write(0x0A);
     payload.write(0x04);
-    payload.write(0x00);
-    payload.write(0x00);
-    payload.write(0x00);
-    payload.write(0x00);
+    payload.write(packageSize & 0xFF);
+    payload.write((packageSize >> 8) & 0xFF);
+    payload.write((packageSize >> 16) & 0xFF);
+    payload.write((packageSize >> 24) & 0xFF);
     payload.write(0x00);
     return buildFrame(OtaCommandConstants.OTA.REQUEST_UPGRADE, (byte) 0x80, payload.toByteArray());
   }

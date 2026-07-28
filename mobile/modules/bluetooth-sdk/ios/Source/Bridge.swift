@@ -498,7 +498,7 @@ private static func mergeStableSearchResults(
         Bridge.sendTypedMessage("mtk_update_complete", body: eventBody)
     }
 
-    /// Send ota_start_ack â€?glasses confirmed receipt of ota_start command
+    /// Send ota_start_ack - glasses confirmed receipt of ota_start command
     static func sendOtaStartAck() {
         let eventBody: [String: Any] = [
             "timestamp": Int64(Date().timeIntervalSince1970 * 1000),

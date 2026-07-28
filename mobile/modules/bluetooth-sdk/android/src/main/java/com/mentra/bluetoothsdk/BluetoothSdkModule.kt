@@ -368,11 +368,12 @@ class BluetoothSdkModule : Module() {
             "stream_status",
             "keep_alive_ack",
             "mtk_update_complete",
+            "glasses_session_changed",
             "ota_progress",
             "ota_start_ack",
             "ota_status",
             "ar99_ota_status",
-            // Nex / BLE debug (NexEventUtils �?Bridge.sendTypedMessage)
+            // Nex / BLE debug (NexEventUtils - Bridge.sendTypedMessage)
             "send_command_to_ble",
             "receive_command_from_ble",
             "miniapp_selected",
@@ -891,7 +892,7 @@ class BluetoothSdkModule : Module() {
         }
 
         // Runs on Dispatchers.IO, not the shared Expo AsyncFunctionQueue: bz2/tar
-        // extraction of the 100�?50MB model is a multi-minute, CPU-bound job. On the
+        // extraction of the 100-50MB model is a multi-minute, CPU-bound job. On the
         // shared queue it froze every other native call in the app until it finished.
         AsyncFunction("extractTarBz2") Coroutine { sourcePath: String, destinationPath: String ->
             withContext(Dispatchers.IO) {

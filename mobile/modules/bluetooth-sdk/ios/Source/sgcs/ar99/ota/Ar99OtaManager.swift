@@ -106,8 +106,16 @@ private enum Ar99OtaProtocol {
         return frame
     }
 
-    static func buildRequestUpgrade(packageSize _: Int, blockSize _: Int, crc32 _: UInt32) -> Data {
-        let payload = Data([0x09, 0x01, 0x00, 0x01, 0x0A, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00])
+    static func buildRequestUpgrade(packageSize: Int, blockSize _: Int, crc32 _: UInt32) -> Data {
+        // Wire layout matches the vendor bring-up frame: type marker, then TLV
+        // 0x0A/len4 = package size (LE). CRC is validated per-block in sendImageData;
+        // blockSize is negotiated separately in connectNegotiation.
+        var payload = Data([0x09, 0x01, 0x00, 0x01, 0x0A, 0x04])
+        payload.append(UInt8(packageSize & 0xFF))
+        payload.append(UInt8((packageSize >> 8) & 0xFF))
+        payload.append(UInt8((packageSize >> 16) & 0xFF))
+        payload.append(UInt8((packageSize >> 24) & 0xFF))
+        payload.append(0x00)
         return buildFrame(command: Ar99OtaCommand.requestUpgrade, parameterType: 0x80, payload: payload)
     }
 

@@ -77,6 +77,7 @@ import {getDevAppAttestation, getDevAppSourcePackage} from "./AppRegistry"
 import {resolveForegroundLocationPermission} from "./ForegroundLocationPermission"
 import {advanceMiniappPingLiveness} from "./MiniappLiveness"
 import {listPhoneCalendarEvents, PhoneCalendarError} from "./PhoneCalendarService"
+import {LocalMiniappStorage} from "./LocalMiniappStorage"
 
 // =============================================================================
 // Types
@@ -231,6 +232,25 @@ const CAMERA_FOV_MAX = 118
 const CAMERA_FOV_DEFAULT = 118
 const CAMERA_FOV_PRESETS: Record<CameraFovPreset, number> = {narrow: 82, standard: 102, wide: 118}
 const CAMERA_ROI_POSITION_BY_NAME: Record<string, CameraRoiPosition> = {center: "center", bottom: "bottom", top: "top"}
+
+const localMiniappStorageBackend = {
+  get(key: string): unknown | null {
+    const result = mmkvStorage.load<unknown>(key)
+    return result.is_ok() ? result.value : null
+  },
+  has(key: string): boolean {
+    return mmkvStorage.load<unknown>(key).is_ok()
+  },
+  set(key: string, value: unknown): void {
+    mmkvStorage.save(key, value)
+  },
+  remove(key: string): void {
+    mmkvStorage.remove(key)
+  },
+  keys(): string[] {
+    return mmkvStorage.getAllKeys()
+  },
+}
 
 // =============================================================================
 // Declared-permission record helper (for CONNECT_ACK / PERMISSIONS_UPDATE)
@@ -1162,49 +1182,77 @@ class LocalMiniappRuntime {
 
       // Persistent binary blob storage (session.blob)
       case MiniappRequestType.BLOB_CREATE:
-        this.blobStore.handleCreate(packageName, payload, requestId)
+        this.enqueueBlobRequest(packageName, requestId, () =>
+          this.blobStore.handleCreate(packageName, payload, requestId),
+        )
         break
       case MiniappRequestType.BLOB_WRITE:
-        this.blobStore.handleWrite(packageName, payload, requestId)
+        this.enqueueBlobRequest(packageName, requestId, () =>
+          this.blobStore.handleWrite(packageName, payload, requestId),
+        )
         break
       case MiniappRequestType.BLOB_COMMIT:
-        this.blobStore.handleCommit(packageName, payload, requestId)
+        this.enqueueBlobRequest(packageName, requestId, () =>
+          this.blobStore.handleCommit(packageName, payload, requestId),
+        )
         break
       case MiniappRequestType.BLOB_ABORT:
-        this.blobStore.handleAbort(packageName, payload, requestId)
+        this.enqueueBlobRequest(packageName, requestId, () =>
+          this.blobStore.handleAbort(packageName, payload, requestId),
+        )
         break
       case MiniappRequestType.BLOB_SET_FROM_URL:
-        void this.blobStore.handleSetFromUrl(packageName, payload, requestId)
+        this.enqueueBlobRequest(packageName, requestId, () =>
+          this.blobStore.handleSetFromUrl(packageName, payload, requestId),
+        )
         break
       case MiniappRequestType.BLOB_IMPORT:
-        void this.blobStore.handleImport(packageName, payload, requestId)
+        this.enqueueBlobRequest(packageName, requestId, () =>
+          this.blobStore.handleImport(packageName, payload, requestId),
+        )
         break
       case MiniappRequestType.BLOB_GET:
-        this.blobStore.handleGet(packageName, payload, requestId)
+        this.enqueueBlobRequest(packageName, requestId, () => this.blobStore.handleGet(packageName, payload, requestId))
         break
       case MiniappRequestType.BLOB_LIST:
-        this.blobStore.handleList(packageName, payload, requestId)
+        this.enqueueBlobRequest(packageName, requestId, () =>
+          this.blobStore.handleList(packageName, payload, requestId),
+        )
         break
       case MiniappRequestType.BLOB_USAGE:
-        this.blobStore.handleUsage(packageName, payload, requestId)
+        this.enqueueBlobRequest(packageName, requestId, () =>
+          this.blobStore.handleUsage(packageName, payload, requestId),
+        )
         break
       case MiniappRequestType.BLOB_DELETE:
-        this.blobStore.handleDelete(packageName, payload, requestId)
+        this.enqueueBlobRequest(packageName, requestId, () =>
+          this.blobStore.handleDelete(packageName, payload, requestId),
+        )
         break
       case MiniappRequestType.BLOB_CLEAR:
-        this.blobStore.handleClear(packageName, payload, requestId)
+        this.enqueueBlobRequest(packageName, requestId, () =>
+          this.blobStore.handleClear(packageName, payload, requestId),
+        )
         break
       case MiniappRequestType.BLOB_OPEN_READ:
-        this.blobStore.handleOpenRead(packageName, payload, requestId)
+        this.enqueueBlobRequest(packageName, requestId, () =>
+          this.blobStore.handleOpenRead(packageName, payload, requestId),
+        )
         break
       case MiniappRequestType.BLOB_READ:
-        this.blobStore.handleRead(packageName, payload, requestId)
+        this.enqueueBlobRequest(packageName, requestId, () =>
+          this.blobStore.handleRead(packageName, payload, requestId),
+        )
         break
       case MiniappRequestType.BLOB_CLOSE_READ:
-        this.blobStore.handleCloseRead(packageName, payload, requestId)
+        this.enqueueBlobRequest(packageName, requestId, () =>
+          this.blobStore.handleCloseRead(packageName, payload, requestId),
+        )
         break
       case MiniappRequestType.BLOB_SHARE:
-        void this.blobStore.handleShare(packageName, payload, requestId)
+        this.enqueueBlobRequest(packageName, requestId, () =>
+          this.blobStore.handleShare(packageName, payload, requestId),
+        )
         break
 
       // Cloud-coordinated features
@@ -2258,7 +2306,6 @@ class LocalMiniappRuntime {
                     appId: packageName,
                     volume,
                     stopOtherAudio,
-                    suppressCloudUplink: true,
                   },
                   (_responseId, success, error, duration, completionReason) => {
                     if (run.playbackRequestId === sentenceRequestId) run.playbackRequestId = undefined
@@ -2307,7 +2354,6 @@ class LocalMiniappRuntime {
             appId: packageName,
             volume,
             stopOtherAudio,
-            suppressCloudUplink: true,
           },
           (_respId, success, error, duration, completionReason) => {
             if (run.playbackRequestId === audioRequestId) run.playbackRequestId = undefined
@@ -2360,7 +2406,6 @@ class LocalMiniappRuntime {
               appId: packageName,
               volume,
               stopOtherAudio,
-              suppressCloudUplink: true,
             },
             (_respId, success, error, duration, completionReason) => {
               if (run.playbackRequestId === audioRequestId) run.playbackRequestId = undefined
@@ -2480,9 +2525,7 @@ class LocalMiniappRuntime {
       // for full GPS warm-up.
       const locationStartedAt = Date.now()
       const cached = await Location.getLastKnownPositionAsync({maxAge: 60_000})
-      console.log(
-        `${LOG_TAG}: location poll cache hit=${cached !== null} elapsed=${Date.now() - locationStartedAt}ms`,
-      )
+      console.log(`${LOG_TAG}: location poll cache hit=${cached !== null} elapsed=${Date.now() - locationStartedAt}ms`)
       const location = cached ?? (await Location.getCurrentPositionAsync({accuracy: Location.Accuracy.Low}))
       console.log(`${LOG_TAG}: location poll resolved elapsed=${Date.now() - locationStartedAt}ms`)
 
@@ -2526,9 +2569,69 @@ class LocalMiniappRuntime {
   private readonly blobStore = new BlobStore({
     sendResult: (packageName, requestId, ok, result, error) =>
       this.sendResult(packageName, requestId, ok, result, error),
-    getUserId: () =>
-      (useSettingsStore.getState().getSetting(ISLAND_SETTINGS_KEYS.coreToken) as string | undefined) || "anonymous",
+    getUserId: () => cloudClientService.getMentraUserId(),
   })
+  private readonly blobRequestQueues = new Map<string, Promise<void>>()
+
+  private readonly simpleStorage = new LocalMiniappStorage({
+    backend: localMiniappStorageBackend,
+    getUserId: () => cloudClientService.resolveMentraUserId(),
+  })
+
+  /**
+   * BlobStore's file helpers are synchronous once a user namespace is selected,
+   * but first-boot Core auth is not. Queue requests per app behind stable
+   * identity resolution so CREATE/WRITE/COMMIT ordering survives that wait.
+   */
+  private enqueueBlobRequest(
+    packageName: string,
+    requestId: string | undefined,
+    operation: () => Promise<void> | void,
+  ): void {
+    const app = this.connectedApps.get(packageName)
+    const previous = this.blobRequestQueues.get(packageName) ?? Promise.resolve()
+    const queued = previous.then(async () => {
+      try {
+        await cloudClientService.resolveMentraUserId()
+      } catch (err) {
+        console.error(`${LOG_TAG}: blob identity error:`, err)
+        this.sendResult(packageName, requestId, false, undefined, {
+          code: MiniappErrorCode.NOT_CONNECTED,
+          message: "Blob storage is unavailable before sign-in completes",
+        })
+        return
+      }
+
+      // unregisterApp() or a crash-respawn may have replaced this app while
+      // identity resolution was pending. Never replay an old context's request
+      // against its replacement.
+      if (!app || this.connectedApps.get(packageName) !== app) return
+
+      // Invoke in request order, but do not keep the queue occupied for the
+      // lifetime of an async picker, download, or share sheet. CREATE/WRITE/
+      // COMMIT are synchronous and therefore still dispatch strictly in order.
+      try {
+        const pending = operation()
+        if (pending) {
+          void pending.catch((err) => this.handleBlobRequestError(packageName, requestId, err))
+        }
+      } catch (err) {
+        this.handleBlobRequestError(packageName, requestId, err)
+      }
+    })
+    this.blobRequestQueues.set(packageName, queued)
+    void queued.finally(() => {
+      if (this.blobRequestQueues.get(packageName) === queued) this.blobRequestQueues.delete(packageName)
+    })
+  }
+
+  private handleBlobRequestError(packageName: string, requestId: string | undefined, err: unknown): void {
+    console.error(`${LOG_TAG}: blob request error:`, err)
+    this.sendResult(packageName, requestId, false, undefined, {
+      code: MiniappErrorCode.INTERNAL,
+      message: err instanceof Error ? err.message : "Blob storage error",
+    })
+  }
 
   /**
    * Heading is a sensor stream — start the native compass when any mini
@@ -2605,12 +2708,6 @@ class LocalMiniappRuntime {
   // Storage helpers
   // ---------------------------------------------------------------------------
 
-  private getStorageKeyPrefix(packageName: string): string {
-    const userId =
-      (useSettingsStore.getState().getSetting(ISLAND_SETTINGS_KEYS.coreToken) as string | undefined) || "anonymous"
-    return `mentraos_localstorage_${userId}_${packageName}_`
-  }
-
   private async handleStorageGet(
     packageName: string,
     payload: Record<string, unknown>,
@@ -2625,9 +2722,8 @@ class LocalMiniappRuntime {
         })
         return
       }
-      const fullKey = this.getStorageKeyPrefix(packageName) + key
-      const result = mmkvStorage.load<unknown>(fullKey)
-      this.sendResult(packageName, requestId, true, {key, value: result.is_ok() ? result.value : null})
+      const value = await this.simpleStorage.get(packageName, key)
+      this.sendResult(packageName, requestId, true, {key, value})
     } catch (err) {
       console.error(`${LOG_TAG}: storage_get error:`, err)
       this.sendResult(packageName, requestId, false, undefined, {
@@ -2651,8 +2747,7 @@ class LocalMiniappRuntime {
         })
         return
       }
-      const fullKey = this.getStorageKeyPrefix(packageName) + key
-      mmkvStorage.save(fullKey, payload.value ?? null)
+      await this.simpleStorage.set(packageName, key, payload.value ?? null)
       this.sendResult(packageName, requestId, true)
     } catch (err) {
       console.error(`${LOG_TAG}: storage_set error:`, err)
@@ -2677,8 +2772,7 @@ class LocalMiniappRuntime {
         })
         return
       }
-      const fullKey = this.getStorageKeyPrefix(packageName) + key
-      mmkvStorage.remove(fullKey)
+      await this.simpleStorage.delete(packageName, key)
       this.sendResult(packageName, requestId, true)
     } catch (err) {
       console.error(`${LOG_TAG}: storage_delete error:`, err)
@@ -2695,9 +2789,7 @@ class LocalMiniappRuntime {
     requestId?: string,
   ): Promise<void> {
     try {
-      const prefix = this.getStorageKeyPrefix(packageName)
-      const allKeys = mmkvStorage.getAllKeys()
-      const keys = allKeys.filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length))
+      const keys = await this.simpleStorage.keys(packageName)
       this.sendResult(packageName, requestId, true, {keys})
     } catch (err) {
       console.error(`${LOG_TAG}: storage_list error:`, err)
@@ -2710,11 +2802,7 @@ class LocalMiniappRuntime {
 
   private async handleStorageClear(packageName: string, requestId?: string): Promise<void> {
     try {
-      const prefix = this.getStorageKeyPrefix(packageName)
-      const allKeys = mmkvStorage.getAllKeys()
-      for (const k of allKeys) {
-        if (k.startsWith(prefix)) mmkvStorage.remove(k)
-      }
+      await this.simpleStorage.clear(packageName)
       this.sendResult(packageName, requestId, true)
     } catch (err) {
       console.error(`${LOG_TAG}: storage_clear error:`, err)
@@ -2739,9 +2827,8 @@ class LocalMiniappRuntime {
         })
         return
       }
-      const fullKey = this.getStorageKeyPrefix(packageName) + key
-      const result = mmkvStorage.load<unknown>(fullKey)
-      this.sendResult(packageName, requestId, true, {has: result.is_ok()})
+      const has = await this.simpleStorage.has(packageName, key)
+      this.sendResult(packageName, requestId, true, {has})
     } catch (err) {
       console.error(`${LOG_TAG}: storage_has error:`, err)
       this.sendResult(packageName, requestId, false, undefined, {
@@ -2753,17 +2840,7 @@ class LocalMiniappRuntime {
 
   private async handleStorageGetAll(packageName: string, requestId?: string): Promise<void> {
     try {
-      const prefix = this.getStorageKeyPrefix(packageName)
-      const allKeys = mmkvStorage.getAllKeys()
-      const values: Record<string, string> = {}
-      for (const k of allKeys) {
-        if (!k.startsWith(prefix)) continue
-        const r = mmkvStorage.load<unknown>(k)
-        if (r.is_ok()) {
-          const v = r.value
-          values[k.slice(prefix.length)] = typeof v === "string" ? v : String(v ?? "")
-        }
-      }
+      const values = await this.simpleStorage.getAll(packageName)
       this.sendResult(packageName, requestId, true, {values})
     } catch (err) {
       console.error(`${LOG_TAG}: storage_get_all error:`, err)
@@ -2788,10 +2865,7 @@ class LocalMiniappRuntime {
         })
         return
       }
-      const prefix = this.getStorageKeyPrefix(packageName)
-      for (const [key, value] of Object.entries(values)) {
-        mmkvStorage.save(prefix + key, value ?? null)
-      }
+      await this.simpleStorage.setMultiple(packageName, values)
       this.sendResult(packageName, requestId, true)
     } catch (err) {
       console.error(`${LOG_TAG}: storage_set_multiple error:`, err)

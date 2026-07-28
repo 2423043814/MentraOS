@@ -56,7 +56,7 @@ export async function checkAr99OtaVersion(currentVersion: string, serialNumber: 
   const config = getAr99ApiConfig()
   const otaAppName = appName.trim() || AR99_OTA_APP_NAME
   const versionUrl = `${config.baseUrl}api/v2/applications/public/getVersionURL`
-  const md5 = BluetoothSdk.buildAr99OtaSignature(config.secret, otaAppName, version, scope, nonce)
+  const md5 = BluetoothSdk.buildAr99OtaSignature(config.clientKey, otaAppName, version, scope, nonce)
 
   const body = {
     app_name: otaAppName,

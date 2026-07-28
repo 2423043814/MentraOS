@@ -2187,11 +2187,11 @@ public class Ar99 extends SGCManager {
   }
 
   private void logSend(String message) {
-    Log.w("_test_", message);
+    Log.d(TAG, message);
   }
 
   private void logRecv(String message) {
-    Log.e("_test_", message);
+    Log.d(TAG, message);
   }
 
   private synchronized void ensureOpusDecoder() {

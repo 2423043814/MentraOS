@@ -1219,7 +1219,8 @@ class MentraBluetoothSdk private constructor(
         deviceManager.sendAr99FactoryReset()
     }
 
-    private suspend fun getFreshGlassesStatus(): GlassesStatus {        val status = getRawGlassesStatus()
+    private suspend fun getFreshGlassesStatus(): GlassesStatus {
+        val status = getRawGlassesStatus()
         if (!status.connected || status.buildNumber.isNotBlank()) {
             return status
         }

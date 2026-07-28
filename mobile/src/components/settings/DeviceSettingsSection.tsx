@@ -139,7 +139,7 @@ export function DeviceSettingsSection() {
       {!glassesConnected && <ConnectDeviceButton />}
       {!glassesConnected && <NotConnectedInfo />}
 
-      {/* Display position 闁?binocular glasses only */}
+      {/* Display position - binocular glasses only */}
       {defaultWearable && !isAr99Family && (features?.display?.count ?? 0) > 1 && (
         <RouteButton
           icon={<Icon name="locate" size={24} color={theme.colors.secondary_foreground} />}
@@ -207,7 +207,7 @@ export function DeviceSettingsSection() {
         onPress={() => push("/miniapps/settings/microphone")}
       />
 
-      {/* WiFi 闁?connected glasses that support WiFi */}
+      {/* WiFi - connected glasses that support WiFi */}
       {showAr99OtaEntry && (
         <>
           <RouteButton
@@ -281,6 +281,4 @@ export function DeviceSettingsSection() {
     </View>
   )
 }
-
-
 
