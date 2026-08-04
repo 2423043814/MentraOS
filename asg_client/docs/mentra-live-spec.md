@@ -84,6 +84,10 @@ Mentra Live supports photo capture and video recording from the glasses camera.
 - **Long camera-button press**: starts video recording unless video is already recording, in which case it stops.
 - Photo/video resolution, FPS, max recording duration, and privacy LED behavior are configurable by commands from the phone app.
 - Captured media is stored locally in package-namespaced storage and exposed to the phone through the camera web server for gallery sync.
+- **Warm photo capture** (camera already running): waits for Camera2's sensor-exposure-start callback, then times the snap near the end of exposure.
+- **Cold photo capture** (camera startup required): plays a short hold-still prep click immediately and every 900ms during camera/ISP startup, then stops the clicks when sensor exposure starts.
+- Single-frame captures use Camera2 `onCaptureStarted` as the hardware anchor. The snap targets 100ms before estimated exposure end (manual duration when fixed; latest preview-metered duration for auto exposure), which keeps it immediate in bright scenes and avoids an early cue during longer low-light exposures. If the completed JPEG reaches `ImageReader` first—as can happen when a HAL delivers `onCaptureStarted` late—the frame callback plays the snap immediately, before extraction or persistence. HDR bursts use the final bracket's exposure/frame callbacks so the user remains still for the whole burst. The final captured callback remains an idempotent last-resort fallback.
+- Prep clicks and snaps use isolated audio overlays so camera feedback does not cut off unrelated device prompts. A failed capture cancels only its own pending click.
 
 ### Gallery-mode behavior
 
@@ -147,12 +151,13 @@ The MTK↔BES UART always starts at 460800 baud. Firmware that supports the nego
 
 ### Diagnostics and reporting
 
-The BES `hs_syvr` system-version response includes the provisioned
-manufacturing serial as `serial_number`. `asg_client` caches a valid value and
-forwards it to the phone in `version_info_3`; the all-zero factory default is
-treated as unprovisioned and omitted. This is the canonical inventory identity
-for Mentra Live. Android's `ro.serialno` and Bluetooth MAC addresses are not
-substitutes for it.
+Mentra Live's canonical product serial is provisioned by the Android firmware in
+`ro.serialno`. `asg_client` reads that property directly and forwards a valid
+value to the phone as `serial_number` in `version_info_3`. It must not substitute
+the generic `0123456789ABCDEF` Android/ADB placeholder—regardless of which
+property exposes it—or a BES system-version field. The Bluetooth
+MAC is sourced from BES (`hs_syvr`/`sr_btaddr`), persisted in
+`persist.mentra.live.mac`, and republished to the phone as soon as it is learned.
 
 `asg_client` includes logging, crash/error reporting, incident log buffering, and debug receivers for development and OTA testing. Production behavior should prioritize device stability and useful logs for support while avoiding secrets in logs.
 
